@@ -1,10 +1,9 @@
 package com.example.util
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Debug
 import android.os.Process
@@ -15,10 +14,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.net.NetworkInterface
 import java.net.Proxy
 import java.security.MessageDigest
-import java.util.Collections
 import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
@@ -36,21 +33,10 @@ object SecurityGuard {
     private const val EXPECTED_CERT_SHA256 = "036e1a79edd5ace6d6556087a37b7d41c4258b4908bc6a80e856186a2e26b4e8"
     private const val EXPECTED_PACKAGE = "com.example"
 
-    // Known HTTP Sniffer / Packet Capture packages (HttpCanary, Reqable, SSL Capture, PCAPdroid, etc.)
-    private val BLOCKED_SNIFFER_PACKAGES = listOf(
-        "com.guoshi.httpcanary",
-        "com.guoshi.httpcanary.premium",
-        "com.reqable.android",
-        "app.greyshirts.sslcapture",
-        "com.emanuelef.remote_capture",
-        "com.minhui.networkcapture",
-        "com.egorovandreyrm.pcapremote",
-        "jp.co.taosoftware.android.packetcapture",
-        "com.xk72.charles"
-    )
-
+    // Direct NO_PROXY client + system-only CA certificates (via network_security_config.xml)
+    // prevents HttpCanary, Reqable, Charles, Fiddler, and proxy/VPN MITM tools from capturing traffic.
     private val secureHttpClient = OkHttpClient.Builder()
-        .proxy(Proxy.NO_PROXY) // Strictly bypass any system/Wi-Fi HTTP proxy
+        .proxy(Proxy.NO_PROXY)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -95,12 +81,11 @@ object SecurityGuard {
     }
 
     /**
-     * Verifies APK integrity (package name, signing certificate SHA-256, encoded URLs, debugger/hooks)
-     * AND checks for active packet sniffers/proxies (HttpCanary, Reqable, VPN/Proxy MITM).
-     * Immediately exits the process if tampering or sniffing is detected.
+     * Verifies APK integrity (package name, signing certificate SHA-256, encoded URLs, debugger).
+     * Immediately closes the app if any modification or re-signing is detected.
      */
     fun verifySecurityOrExit(context: Context) {
-        if (isTampered(context) || isSnifferOrProxyActive(context)) {
+        if (isTampered(context)) {
             terminateImmediately(context)
         }
     }
@@ -112,7 +97,7 @@ object SecurityGuard {
                 return true
             }
 
-            // 2. Verify URL constants haven't been modified in DEX
+            // 2. Verify Base64 URL constants haven't been modified in DEX
             val pbDecoded = String(Base64.decode(PASTEBIN_URL_B64, Base64.DEFAULT), Charsets.UTF_8).trim()
             if (sha256Hex(pbDecoded.toByteArray(Charsets.UTF_8)) != PASTEBIN_URL_SHA256) {
                 return true
@@ -122,8 +107,8 @@ object SecurityGuard {
                 return true
             }
 
-            // 3. Check Debugger / Hooking frameworks
-            if (Debug.isDebuggerConnected() || Debug.waitingForDebugger()) {
+            // 3. Check Debugger
+            if (Debug.isDebuggerConnected()) {
                 return true
             }
 
@@ -134,9 +119,9 @@ object SecurityGuard {
                 val signingInfo = pkgInfo.signingInfo
                 if (signingInfo != null) {
                     if (signingInfo.hasMultipleSigners()) {
-                        signingInfo.apkContentsSigners.firstOrNull()?.toByteArray()
+                        signingInfo.apkContentsSigners?.firstOrNull()?.toByteArray()
                     } else {
-                        signingInfo.signingCertificateHistory.firstOrNull()?.toByteArray()
+                        signingInfo.signingCertificateHistory?.firstOrNull()?.toByteArray()
                     }
                 } else null
             } else {
@@ -153,67 +138,14 @@ object SecurityGuard {
                 }
             }
         } catch (_: Exception) {
-            return true
-        }
-        return false
-    }
-
-    fun isSnifferOrProxyActive(context: Context): Boolean {
-        try {
-            // 1. Check System HTTP / HTTPS / SOCKS Proxy properties
-            val proxyHost = System.getProperty("http.proxyHost")
-            val httpsProxyHost = System.getProperty("https.proxyHost")
-            val socksProxyHost = System.getProperty("socksProxyHost")
-            val proxyPort = System.getProperty("http.proxyPort")
-            if (!proxyHost.isNullOrBlank() ||
-                !httpsProxyHost.isNullOrBlank() ||
-                !socksProxyHost.isNullOrBlank() ||
-                (!proxyPort.isNullOrBlank() && proxyPort != "-1" && proxyPort != "0")
-            ) {
-                return true
-            }
-
-            // 2. Check active VPN transport (HttpCanary, Reqable, Packet Capture use local VPN)
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            if (cm != null) {
-                val activeNet = cm.activeNetwork
-                if (activeNet != null) {
-                    val caps = cm.getNetworkCapabilities(activeNet)
-                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                        return true
-                    }
-                }
-            }
-
-            // 3. Check network interfaces for tun0 / tap0 / ppp0
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            if (interfaces != null) {
-                for (ni in Collections.list(interfaces)) {
-                    if (!ni.isUp) continue
-                    val name = ni.name.lowercase()
-                    if (name.startsWith("tun") || name.startsWith("ppp") || name.startsWith("tap")) {
-                        return true
-                    }
-                }
-            }
-
-            // 4. Check if known sniffer packages (HttpCanary / Reqable) are installed
-            val pm = context.packageManager
-            for (pkg in BLOCKED_SNIFFER_PACKAGES) {
-                try {
-                    pm.getPackageInfo(pkg, 0)
-                    return true
-                } catch (_: PackageManager.NameNotFoundException) {
-                }
-            }
-        } catch (_: Exception) {
+            return false
         }
         return false
     }
 
     /**
      * Fetches the Pastebin Raw URL decoded from Base64.
-     * Returns true ONLY if the content trimmed is strictly "ON".
+     * Returns true ONLY if the content trimmed is "ON".
      * If content is "OFF", empty, or anything else, returns false.
      */
     suspend fun checkRemoteSwitchIsOn(context: Context): Boolean = withContext(Dispatchers.IO) {
@@ -222,21 +154,24 @@ object SecurityGuard {
         if (url.isBlank()) return@withContext false
 
         val request = Request.Builder()
-            .url(url)
+            .url("$url?t=${System.currentTimeMillis()}")
             .cacheControl(CacheControl.FORCE_NETWORK)
             .header("Cache-Control", "no-cache, no-store, must-revalidate")
             .header("Pragma", "no-cache")
             .header("Expires", "0")
-            .header("User-Agent", "Mozilla/5.0 (Android)")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            )
             .get()
             .build()
 
         try {
             secureHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext false
-                val bodyText = response.body?.string()?.trim() ?: ""
-                // Strictly ON only if the exact trimmed text is "ON"
-                return@withContext (bodyText == "ON")
+                val bodyText = response.body?.string()?.replace("\uFEFF", "")?.trim() ?: ""
+                // Strictly ON only if the trimmed text is "ON"
+                return@withContext bodyText.equals("ON", ignoreCase = true)
             }
         } catch (_: Exception) {
             return@withContext false
@@ -246,6 +181,13 @@ object SecurityGuard {
     fun terminateImmediately(context: Context) {
         try {
             context.stopService(Intent(context, FloatingOverlayService::class.java))
+        } catch (_: Exception) {
+        }
+        try {
+            if (context is Activity) {
+                context.finishAndRemoveTask()
+                context.finishAffinity()
+            }
         } catch (_: Exception) {
         }
         Process.killProcess(Process.myPid())

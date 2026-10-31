@@ -15,8 +15,8 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        SecurityGuard.verifySecurityOrExit(this)
         super.onCreate(savedInstanceState)
+        SecurityGuard.verifySecurityOrExit(this)
         enableEdgeToEdge()
 
         setContent {
