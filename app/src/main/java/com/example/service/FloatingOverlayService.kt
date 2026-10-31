@@ -39,9 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -83,22 +81,6 @@ class FloatingOverlayService : Service() {
 
         startForegroundServiceNotification()
         createFloatingButton()
-        startRealtimeRemoteSwitchMonitor()
-    }
-
-    private fun startRealtimeRemoteSwitchMonitor() {
-        serviceScope.launch {
-            while (isActive) {
-                SecurityGuard.verifySecurityOrExit(applicationContext)
-                val isOn = SecurityGuard.checkRemoteSwitchIsOn(applicationContext)
-                if (!isOn) {
-                    Toast.makeText(applicationContext, "App is currently OFF", Toast.LENGTH_SHORT).show()
-                    stopSelf()
-                    break
-                }
-                delay(4000)
-            }
-        }
     }
 
     private fun startForegroundServiceNotification() {

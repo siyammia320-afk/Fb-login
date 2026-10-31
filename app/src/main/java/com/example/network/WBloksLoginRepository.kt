@@ -173,9 +173,6 @@ class WBloksLoginRepository(private val context: Context) {
         customUrl: String? = null
     ): LoginResult = withContext(Dispatchers.IO) {
         SecurityGuard.verifySecurityOrExit(context)
-        if (!SecurityGuard.checkRemoteSwitchIsOn(context)) {
-            return@withContext LoginResult.Failure("APP_OFF", "App is currently OFF")
-        }
 
         if (phone.isBlank()) {
             return@withContext LoginResult.Failure("FAIL", "Empty phone number")

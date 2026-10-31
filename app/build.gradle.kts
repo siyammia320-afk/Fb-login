@@ -13,7 +13,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.example"
+    applicationId = "com.arafat.otp"
     minSdk = 24
     targetSdk = 36
     val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1

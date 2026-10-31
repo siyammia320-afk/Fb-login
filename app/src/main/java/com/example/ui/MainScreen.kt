@@ -8,12 +8,15 @@ import android.widget.Toast
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -21,6 +24,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -38,14 +43,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
+import com.example.data.AccountItem
 import com.example.service.FloatingOverlayService
+import com.example.util.OtpManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val isOverlayRunning by viewModel.isOverlayRunning.collectAsState()
-    val isRemoteSwitchOn by viewModel.isRemoteSwitchOn.collectAsState()
+    val savedNumber by viewModel.savedNumber.collectAsState()
+    val savedPassword by viewModel.savedPassword.collectAsState()
+    val loginStatusMessage by viewModel.loginStatusMessage.collectAsState()
+    val isLoggingIn by viewModel.isLoggingIn.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
+
     val requiredUpdate by viewModel.requiredUpdate.collectAsState()
     val isDownloadingUpdate by viewModel.isDownloadingUpdate.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
@@ -81,17 +93,17 @@ fun MainScreen(viewModel: MainViewModel) {
         },
         containerColor = Color(0xFF020617)
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            val update = requiredUpdate
-            if (update != null) {
-                // Non-Dismissible Force Update Lock Screen
+        val update = requiredUpdate
+        if (update != null) {
+            // Non-Dismissible Force Update Lock Screen
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
                     shape = RoundedCornerShape(12.dp),
@@ -173,179 +185,214 @@ fun MainScreen(viewModel: MainViewModel) {
                         }
                     }
                 }
-            } else if (isRemoteSwitchOn == null) {
-                // Initial Status Check Card
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp))
-                ) {
-                    Column(
+            }
+        } else {
+            // Main Screen: Floating Overlay Controls + Direct In-App Login + Saved History List
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // 1. Floating Overlay Controls Card
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
                     ) {
-                        Text(
-                            text = "CHECKING SERVER STATUS...",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF94A3B8)
-                        )
-                    }
-                }
-            } else if (isRemoteSwitchOn == false) {
-                // Real-Time APP OFF Lock Card (shown when Pastebin is OFF, empty, or invalid text)
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color(0xFFDC2626), RoundedCornerShape(12.dp))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "APP IS CURRENTLY OFF",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF87171)
-                        )
-
-                        Text(
-                            text = "Server switch is OFF. The app will automatically unlock when turned ON.",
-                            fontSize = 13.sp,
-                            color = Color(0xFFCBD5E1),
-                            textAlign = TextAlign.Center
-                        )
-
-                        Button(
-                            onClick = { viewModel.refreshRemoteSwitchNow() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
-                            shape = RoundedCornerShape(8.dp),
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
-                                .testTag("retry_remote_switch_button")
-                        ) {
-                            Text(
-                                text = "CHECK AGAIN",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            } else {
-                // Normal App Control Card (Overlay Permission + START / STOP)
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                    if (Settings.canDrawOverlays(context)) {
-                                        Toast.makeText(context, "Overlay Permission Already Granted!", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val intent = Intent(
-                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                            Uri.parse("package:${context.packageName}")
-                                        )
-                                        context.startActivity(intent)
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("overlay_permission_button")
-                        ) {
-                            Text(
-                                text = "OVERLAY PERMISSION",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = Color.White
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Button(
                                 onClick = {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                                        Toast.makeText(context, "Grant Overlay Permission First!", Toast.LENGTH_SHORT).show()
-                                        val intent = Intent(
-                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                            Uri.parse("package:${context.packageName}")
-                                        )
-                                        context.startActivity(intent)
-                                    } else if (!isOverlayRunning) {
-                                        val serviceIntent = Intent(context, FloatingOverlayService::class.java)
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                            context.startForegroundService(serviceIntent)
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        if (Settings.canDrawOverlays(context)) {
+                                            Toast.makeText(context, "Overlay Permission Already Granted!", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            context.startService(serviceIntent)
+                                            val intent = Intent(
+                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                Uri.parse("package:${context.packageName}")
+                                            )
+                                            context.startActivity(intent)
                                         }
-                                        viewModel.setOverlayRunning(true)
-                                        Toast.makeText(context, "Started", Toast.LENGTH_SHORT).show()
                                     }
                                 },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("overlay_permission_button")
+                            ) {
+                                Text(
+                                    text = "OVERLAY PERMISSION",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color.White
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                                            Toast.makeText(context, "Grant Overlay Permission First!", Toast.LENGTH_SHORT).show()
+                                            val intent = Intent(
+                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                Uri.parse("package:${context.packageName}")
+                                            )
+                                            context.startActivity(intent)
+                                        } else if (!isOverlayRunning) {
+                                            val serviceIntent = Intent(context, FloatingOverlayService::class.java)
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                context.startForegroundService(serviceIntent)
+                                            } else {
+                                                context.startService(serviceIntent)
+                                            }
+                                            viewModel.setOverlayRunning(true)
+                                            Toast.makeText(context, "Started", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("start_overlay_button")
+                                ) {
+                                    Text(
+                                        text = "START",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (isOverlayRunning) {
+                                            context.stopService(Intent(context, FloatingOverlayService::class.java))
+                                            viewModel.setOverlayRunning(false)
+                                            Toast.makeText(context, "Stopped", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("stop_overlay_button")
+                                ) {
+                                    Text(
+                                        text = "STOP",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Direct In-App Phone Number + Password Login Card
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = "Direct FB Login",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            OutlinedTextField(
+                                value = savedNumber,
+                                onValueChange = { viewModel.updateNumber(it) },
+                                placeholder = { Text("Enter Number", color = Color(0xFF94A3B8)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedContainerColor = Color(0xFF1E293B),
+                                    unfocusedContainerColor = Color(0xFF1E293B),
+                                    focusedBorderColor = Color(0xFF38BDF8),
+                                    unfocusedBorderColor = Color(0xFF475569)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("number_input")
+                            )
+
+                            OutlinedTextField(
+                                value = savedPassword,
+                                onValueChange = { viewModel.updatePassword(it) },
+                                placeholder = { Text("Enter Password (Auto-Saved)", color = Color(0xFF94A3B8)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedContainerColor = Color(0xFF1E293B),
+                                    unfocusedContainerColor = Color(0xFF1E293B),
+                                    focusedBorderColor = Color(0xFF38BDF8),
+                                    unfocusedBorderColor = Color(0xFF475569)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("password_input")
+                            )
+
+                            if (loginStatusMessage.isNotBlank()) {
+                                val statusColor = when {
+                                    loginStatusMessage.startsWith("✔") || loginStatusMessage.contains("SUCCESS", ignoreCase = true) -> Color(0xFF4ADE80)
+                                    loginStatusMessage.startsWith("Logging") -> Color(0xFFFACC15)
+                                    else -> Color(0xFFF87171)
+                                }
+                                Text(
+                                    text = loginStatusMessage,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = statusColor
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.triggerLogin(savedNumber, savedPassword) },
+                                enabled = !isLoggingIn,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .testTag("start_overlay_button")
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("in_app_login_button")
                             ) {
                                 Text(
-                                    text = "START",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = Color.White
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    if (isOverlayRunning) {
-                                        context.stopService(Intent(context, FloatingOverlayService::class.java))
-                                        viewModel.setOverlayRunning(false)
-                                        Toast.makeText(context, "Stopped", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .testTag("stop_overlay_button")
-                            ) {
-                                Text(
-                                    text = "STOP",
+                                    text = if (isLoggingIn) "LOGGING IN..." else "LOGIN",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
                                     color = Color.White
@@ -353,6 +400,165 @@ fun MainScreen(viewModel: MainViewModel) {
                             }
                         }
                     }
+                }
+
+                // 3. Saved Accounts History Section
+                if (accounts.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Saved Accounts (${accounts.size})",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            Button(
+                                onClick = { viewModel.clearAll() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .height(34.dp)
+                                    .testTag("clear_all_accounts_button")
+                            ) {
+                                Text(
+                                    text = "CLEAR ALL",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    items(accounts, key = { it.id }) { acc ->
+                        InAppAccountRow(
+                            acc = acc,
+                            onDelete = { viewModel.deleteAccount(acc.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InAppAccountRow(
+    acc: AccountItem,
+    onDelete: () -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFF334155), RoundedCornerShape(10.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = acc.number,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Button(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Text(
+                        text = "X",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        OtpManager.copyToClipboard(context, acc.number)
+                        Toast.makeText(context, "NUMBER", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                ) {
+                    Text(
+                        text = "NUMBER",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        OtpManager.copyToClipboard(context, acc.cookie)
+                        Toast.makeText(context, "COOKIE", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                ) {
+                    Text(
+                        text = "COOKIE",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        OtpManager.copyToClipboard(context, acc.uid)
+                        Toast.makeText(context, "UID", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                ) {
+                    Text(
+                        text = "UID",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

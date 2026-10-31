@@ -13,11 +13,9 @@ import com.example.service.FloatingOverlayService
 import com.example.util.AppUpdateManager
 import com.example.util.SecurityGuard
 import com.example.util.UpdateInfo
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -34,10 +32,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isOverlayRunning = MutableStateFlow(false)
     val isOverlayRunning: StateFlow<Boolean> = _isOverlayRunning.asStateFlow()
-
-    // Real-Time Pastebin Switch State: null = checking, true = ON, false = OFF
-    private val _isRemoteSwitchOn = MutableStateFlow<Boolean?>(null)
-    val isRemoteSwitchOn: StateFlow<Boolean?> = _isRemoteSwitchOn.asStateFlow()
 
     private val _loginStatusMessage = MutableStateFlow("")
     val loginStatusMessage: StateFlow<String> = _loginStatusMessage.asStateFlow()
@@ -66,36 +60,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         SecurityGuard.verifySecurityOrExit(application)
         checkForAppUpdate()
-        startRealtimeRemoteSwitchPolling()
-    }
-
-    private fun startRealtimeRemoteSwitchPolling() {
-        viewModelScope.launch {
-            while (isActive) {
-                val app = getApplication<Application>()
-                SecurityGuard.verifySecurityOrExit(app)
-                val isOn = SecurityGuard.checkRemoteSwitchIsOn(app)
-                _isRemoteSwitchOn.value = isOn
-                if (!isOn) {
-                    app.stopService(Intent(app, FloatingOverlayService::class.java))
-                    _isOverlayRunning.value = false
-                }
-                delay(4000)
-            }
-        }
-    }
-
-    fun refreshRemoteSwitchNow() {
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            SecurityGuard.verifySecurityOrExit(app)
-            val isOn = SecurityGuard.checkRemoteSwitchIsOn(app)
-            _isRemoteSwitchOn.value = isOn
-            if (!isOn) {
-                app.stopService(Intent(app, FloatingOverlayService::class.java))
-                _isOverlayRunning.value = false
-            }
-        }
     }
 
     fun checkForAppUpdate() {
@@ -176,8 +140,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerLogin(phoneInput: String? = null, passInput: String? = null) {
-        val phone = phoneInput ?: savedNumber.value.trim()
-        val pass = passInput ?: savedPassword.value.trim()
+        val phone = (phoneInput ?: savedNumber.value).trim()
+        val pass = (passInput ?: savedPassword.value).trim()
         val customUrl = savedApiUrl.value.trim()
 
         if (phone.isBlank()) {
@@ -189,8 +153,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        accountRepo.saveNumber(phone)
+        accountRepo.savePassword(pass)
+
         _isLoggingIn.value = true
-        _loginStatusMessage.value = "Logging in: $phone..."
+        _loginStatusMessage.value = "Logging in as $phone..."
 
         viewModelScope.launch {
             val result = loginRepo.executeWBloksLogin(phone, pass, customUrl)
@@ -198,18 +165,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when (result) {
                 is LoginResult.Success -> {
                     accountRepo.saveAccount(result.account)
-                    _loginStatusMessage.value = "Success! UID: ${result.account.uid}"
+                    _loginStatusMessage.value = "✔ LOGIN SUCCESS! UID: ${result.account.uid}"
                 }
                 is LoginResult.Failure -> {
-                    val failItem = AccountItem(
-                        number = phone,
-                        password = pass,
-                        cookie = "",
-                        uid = "",
-                        status = result.status
-                    )
-                    accountRepo.saveAccount(failItem)
-                    _loginStatusMessage.value = "Failed (${result.status}): ${result.message}"
+                    _loginStatusMessage.value = "${result.status}: ${result.message}"
                 }
             }
         }

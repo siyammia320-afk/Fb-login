@@ -29,7 +29,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         SecurityGuard.verifySecurityOrExit(this)
-        viewModel.refreshRemoteSwitchNow()
         if (viewModel.requiredUpdate.value == null && !viewModel.isDownloadingUpdate.value) {
             viewModel.checkForAppUpdate()
         }
