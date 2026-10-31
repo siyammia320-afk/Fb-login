@@ -1,0 +1,6 @@
+{
+  "name": "FB Login Manager",
+  "description": "Facebook account manager with floating overlay, W-Bloks login, live range manager, and OTP auto-copy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
