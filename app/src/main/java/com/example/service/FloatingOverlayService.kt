@@ -31,6 +31,7 @@ import androidx.core.app.NotificationCompat
 import com.example.data.AccountItem
 import com.example.data.AccountRepository
 import com.example.network.LoginResult
+import com.example.network.ProfilePicResult
 import com.example.network.WBloksLoginRepository
 import com.example.util.OtpManager
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +69,9 @@ class FloatingOverlayService : Service() {
     }
 
     private var isLoggingIn = false
+    private var isAddingProfile = false
+    private var isAddingCover = false
+    private var lastLoggedInAccount: AccountItem? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -209,7 +213,6 @@ class FloatingOverlayService : Service() {
         val density = resources.displayMetrics.density
         fun dp(v: Int): Int = (v * density).toInt()
 
-        // Focusable overlay window so the soft keyboard works inside EditText fields
         val overlayParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -235,7 +238,7 @@ class FloatingOverlayService : Service() {
             orientation = LinearLayout.VERTICAL
             background = cardBg
             setPadding(dp(16), dp(14), dp(16), dp(16))
-            setOnClickListener { } // consume clicks inside dialog
+            setOnClickListener { }
         }
 
         // Header Row
@@ -333,6 +336,126 @@ class FloatingOverlayService : Service() {
         }
         container.addView(statusTv)
 
+        val addProfileBtnBg = GradientDrawable().apply {
+            setColor(Color.parseColor("#2563EB"))
+            cornerRadius = dp(8).toFloat()
+        }
+
+        // ADD PROFILE button (appears below LOGIN button after login succeeds)
+        val addProfileBtn = Button(this).apply {
+            text = "ADD PROFILE"
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = addProfileBtnBg
+            minHeight = 0
+            minimumHeight = 0
+            setPadding(0, dp(10), 0, dp(10))
+            visibility = if (lastLoggedInAccount != null) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, dp(8), 0, 0)
+            }
+            setOnClickListener {
+                if (isAddingProfile) return@setOnClickListener
+                val account = lastLoggedInAccount
+                if (account == null || account.uid.isBlank() || account.cookie.isBlank()) {
+                    Toast.makeText(applicationContext, "Login an account first!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                isAddingProfile = true
+                isEnabled = false
+                text = "ADDING PROFILE..."
+                statusTv.visibility = View.VISIBLE
+                statusTv.setTextColor(Color.parseColor("#FACC15"))
+                statusTv.text = "Sending Add Profile request for UID: ${account.uid}..."
+
+                serviceScope.launch {
+                    val res = loginRepo.addProfilePicture(account.uid, account.cookie)
+                    isAddingProfile = false
+                    withContext(Dispatchers.Main) {
+                        isEnabled = true
+                        text = "ADD PROFILE"
+                        when (res) {
+                            is ProfilePicResult.Success -> {
+                                statusTv.setTextColor(Color.parseColor("#4ADE80"))
+                                statusTv.text = "✔ ${res.message} (UID: ${account.uid})"
+                                Toast.makeText(applicationContext, res.message, Toast.LENGTH_SHORT).show()
+                            }
+                            is ProfilePicResult.Failure -> {
+                                statusTv.setTextColor(Color.parseColor("#F87171"))
+                                statusTv.text = "✘ ${res.message}"
+                                Toast.makeText(applicationContext, res.message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val addCoverBtnBg = GradientDrawable().apply {
+            setColor(Color.parseColor("#7C3AED"))
+            cornerRadius = dp(8).toFloat()
+        }
+
+        // ADD COVER PHOTO button (appears below ADD PROFILE button after login succeeds)
+        val addCoverBtn = Button(this).apply {
+            text = "ADD COVER PHOTO"
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = addCoverBtnBg
+            minHeight = 0
+            minimumHeight = 0
+            setPadding(0, dp(10), 0, dp(10))
+            visibility = if (lastLoggedInAccount != null) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, dp(8), 0, 0)
+            }
+            setOnClickListener {
+                if (isAddingCover) return@setOnClickListener
+                val account = lastLoggedInAccount
+                if (account == null || account.uid.isBlank() || account.cookie.isBlank()) {
+                    Toast.makeText(applicationContext, "Login an account first!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                isAddingCover = true
+                isEnabled = false
+                text = "ADDING COVER PHOTO..."
+                statusTv.visibility = View.VISIBLE
+                statusTv.setTextColor(Color.parseColor("#FACC15"))
+                statusTv.text = "Uploading Cover Photo for UID: ${account.uid}..."
+
+                serviceScope.launch {
+                    val res = loginRepo.addCoverPhoto(account.uid, account.cookie)
+                    isAddingCover = false
+                    withContext(Dispatchers.Main) {
+                        isEnabled = true
+                        text = "ADD COVER PHOTO"
+                        when (res) {
+                            is ProfilePicResult.Success -> {
+                                statusTv.setTextColor(Color.parseColor("#4ADE80"))
+                                statusTv.text = "✔ ${res.message} (UID: ${account.uid})"
+                                Toast.makeText(applicationContext, res.message, Toast.LENGTH_SHORT).show()
+                            }
+                            is ProfilePicResult.Failure -> {
+                                statusTv.setTextColor(Color.parseColor("#F87171"))
+                                statusTv.text = "✘ ${res.message}"
+                                Toast.makeText(applicationContext, res.message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         val loginBtnBg = GradientDrawable().apply {
             setColor(Color.parseColor("#16A34A"))
             cornerRadius = dp(8).toFloat()
@@ -370,7 +493,6 @@ class FloatingOverlayService : Service() {
                     return@setOnClickListener
                 }
 
-                // Persist number and password automatically
                 accountRepo.saveNumber(phone)
                 accountRepo.savePassword(pass)
 
@@ -389,9 +511,12 @@ class FloatingOverlayService : Service() {
                         text = "LOGIN"
                         when (result) {
                             is LoginResult.Success -> {
+                                lastLoggedInAccount = result.account
                                 accountRepo.saveAccount(result.account)
                                 statusTv.setTextColor(Color.parseColor("#4ADE80"))
-                                statusTv.text = "SUCCESS! UID: ${result.account.uid}"
+                                statusTv.text = "✔ LOGIN SUCCESS! UID: ${result.account.uid}"
+                                addProfileBtn.visibility = View.VISIBLE
+                                addCoverBtn.visibility = View.VISIBLE
                                 Toast.makeText(applicationContext, "Login Successful!", Toast.LENGTH_SHORT).show()
                             }
                             is LoginResult.Failure -> {
@@ -403,7 +528,10 @@ class FloatingOverlayService : Service() {
                 }
             }
         }
+
         container.addView(loginBtn)
+        container.addView(addProfileBtn)
+        container.addView(addCoverBtn)
 
         val frameParams = FrameLayout.LayoutParams(
             dp(290),
