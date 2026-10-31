@@ -34,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -76,19 +78,29 @@ fun MainScreen(viewModel: MainViewModel) {
     var passwordInput by remember(savedPassword) { mutableStateOf(savedPassword) }
     var isPasswordVisible by remember { mutableStateOf(false) }
 
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        cursorColor = Color(0xFF38BDF8),
+        focusedBorderColor = Color(0xFF38BDF8),
+        unfocusedBorderColor = Color(0xFF475569),
+        focusedLabelColor = Color(0xFF38BDF8),
+        unfocusedLabelColor = Color(0xFF94A3B8)
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = "FB LOGIN TOOL",
-                        fontSize = 19.sp,
+                        text = "FACEBOOK LOGIN · W-Bloks",
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF0F172A),
-                    titleContentColor = Color.White
+                    titleContentColor = Color(0xFF38BDF8)
                 )
             )
         },
@@ -195,16 +207,16 @@ fun MainScreen(viewModel: MainViewModel) {
                             .padding(16.dp)
                     ) {
                         Text(
-                            text = "Login Credentials",
+                            text = "W-Bloks Login Credentials",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Enter Phone Number & Password below. Saved values are used for floating button logins.",
+                            text = "[•] Enter Number & Password below (auto-saved for floating overlay):",
                             fontSize = 12.sp,
-                            color = Color(0xFF94A3B8)
+                            color = Color(0xFF4ADE80)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -215,13 +227,14 @@ fun MainScreen(viewModel: MainViewModel) {
                                 numberInput = it
                                 viewModel.updateNumber(it)
                             },
-                            label = { Text("ENTER NUMBER", color = Color(0xFF94A3B8)) },
+                            label = { Text("[•] ENTER NUMBER :") },
                             singleLine = true,
+                            colors = textFieldColors,
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Phone,
                                     contentDescription = "Phone Number",
-                                    tint = Color(0xFF38BDF8)
+                                    tint = Color(0xFF4ADE80)
                                 )
                             },
                             modifier = Modifier
@@ -238,15 +251,16 @@ fun MainScreen(viewModel: MainViewModel) {
                                 passwordInput = it
                                 viewModel.updatePassword(it)
                             },
-                            label = { Text("ENTER PASSWORD", color = Color(0xFF94A3B8)) },
+                            label = { Text("[•] ENTER PASSWORD :") },
                             singleLine = true,
+                            colors = textFieldColors,
                             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
                                 IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                                     Icon(
                                         imageVector = Icons.Default.Security,
                                         contentDescription = "Toggle Password Visibility",
-                                        tint = Color(0xFF38BDF8)
+                                        tint = Color(0xFF4ADE80)
                                     )
                                 }
                             },
@@ -271,7 +285,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("SAVE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("SAVE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
 
                             Button(
@@ -288,11 +302,13 @@ fun MainScreen(viewModel: MainViewModel) {
                                 if (isLoggingIn) {
                                     CircularProgressIndicator(
                                         color = Color.White,
-                                        modifier = Modifier.height(18.dp).width(18.dp),
+                                        modifier = Modifier
+                                            .height(18.dp)
+                                            .width(18.dp),
                                         strokeWidth = 2.dp
                                     )
                                 } else {
-                                    Text("LOGIN NOW", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text("LOGIN NOW", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }
@@ -343,22 +359,37 @@ fun MainScreen(viewModel: MainViewModel) {
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
                             ) {
-                                Text("COPY OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("COPY OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }
                 }
             }
 
-            // Status message
+            // Terminal-style Status Box (matching ck_ded3bca0.py output)
             if (loginStatus.isNotBlank()) {
                 item {
-                    Text(
-                        text = loginStatus,
-                        fontSize = 13.sp,
-                        color = Color(0xFFFACC15),
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    val isSuccess = loginStatus.startsWith("Success", ignoreCase = true)
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF090D16)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                1.dp,
+                                if (isSuccess) Color(0xFF4ADE80) else Color(0xFFF87171),
+                                RoundedCornerShape(8.dp)
+                            )
+                    ) {
+                        Text(
+                            text = loginStatus,
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (isSuccess) Color(0xFF4ADE80) else Color(0xFFF87171),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                 }
             }
 
@@ -487,7 +518,7 @@ fun AccountHistoryCard(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("NUMBER", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("NUMBER", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
 
                 Button(
@@ -499,7 +530,7 @@ fun AccountHistoryCard(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("COOKIE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("COOKIE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
 
                 Button(
@@ -511,7 +542,7 @@ fun AccountHistoryCard(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("UID", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("UID", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
